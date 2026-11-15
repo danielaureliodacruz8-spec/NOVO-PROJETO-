@@ -116,6 +116,9 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
         resultado['lado']?.toString() ??
         _obterPropriedade(resultado['pontoDrenagem'], 'lado');
 
+    final medidasConcreto =
+        _converterMapaDouble(resultado['medidasConcreto']);
+
     return ConferenciaRegistroModel(
       id: _uuid.v4(),
       codigoDrenagem: drenagem.codigo,
@@ -133,6 +136,9 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
       dataHora: resultado['dataHora'] is DateTime
           ? resultado['dataHora'] as DateTime
           : DateTime.now(),
+      medidasExecutadas: medidasConcreto,
+      volumeConcretoM3:
+          _converterDoubleNulo(resultado['volumeConcretoM3']),
     );
   }
 
@@ -170,6 +176,22 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
     return double.tryParse(
       valor.toString().replaceAll(',', '.'),
     );
+  }
+
+  Map<String, double> _converterMapaDouble(dynamic valor) {
+    if (valor is! Map) return {};
+
+    final resultado = <String, double>{};
+
+    valor.forEach((chave, medida) {
+      final numero = _converterDoubleNulo(medida);
+
+      if (numero != null) {
+        resultado[chave.toString()] = numero;
+      }
+    });
+
+    return resultado;
   }
 
   List<bool> _converterItens(dynamic itens) {
@@ -554,6 +576,18 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+                    if (conferencia.volumeConcretoM3 != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Concreto: '
+                        '${conferencia.volumeConcretoM3!.toStringAsFixed(3)} m³',
+                        style: TextStyle(
+                          color: Colors.green.shade800,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 3),
                     Text(
                       dataFormatada,
@@ -644,6 +678,32 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
                   '${conferencia.quantidadeItensConcluidos} de '
                   '${conferencia.quantidadeItens}',
                 ),
+                if (conferencia.volumeConcretoM3 != null) ...[
+                  const Divider(height: 24),
+                  _linhaDetalhe(
+                    'Volume de concreto',
+                    '${conferencia.volumeConcretoM3!.toStringAsFixed(3)} m³',
+                  ),
+                ],
+                if (conferencia.medidasExecutadas.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'MEDIDAS EXECUTADAS',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ...conferencia.medidasExecutadas.entries.map(
+                    (item) => _linhaDetalhe(
+                      item.key.toUpperCase(),
+                      '${item.value.toStringAsFixed(3)} m',
+                    ),
+                  ),
+                ],
                 if (conferencia.observacao.trim().isNotEmpty)
                   _linhaDetalhe(
                     'Observação',
