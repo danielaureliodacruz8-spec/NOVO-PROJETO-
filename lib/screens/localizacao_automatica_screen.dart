@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import 'package:geolocator/geolocator.dart';
 
-import '../services/localizacao_service.dart';
-import '../theme/app_theme.dart';
+import '../services/eixo_estaca_service.dart';
 
 class LocalizacaoAutomaticaScreen extends StatefulWidget {
   const LocalizacaoAutomaticaScreen({super.key});
@@ -14,436 +13,436 @@ class LocalizacaoAutomaticaScreen extends StatefulWidget {
 
 class _LocalizacaoAutomaticaScreenState
     extends State<LocalizacaoAutomaticaScreen> {
-  final LocalizacaoService _localizacaoService = LocalizacaoService();
+  final EixoEstacaService _eixoEstacaService = EixoEstacaService();
 
-  DadosLocalizacao? _localizacao;
+  String _rodoviaSelecionada = 'GO-110';
+
   bool _carregando = false;
   String? _erro;
+  Position? _posicao;
+  ResultadoEstaca? _resultado;
 
   @override
   void initState() {
     super.initState();
-    _obterLocalizacao();
+    _atualizarLocalizacao();
   }
 
-  Future<void> _obterLocalizacao() async {
+  Future<void> _atualizarLocalizacao() async {
     setState(() {
       _carregando = true;
       _erro = null;
+      _resultado = null;
     });
 
     try {
-      final localizacao =
-          await _localizacaoService.obterLocalizacaoAtual();
+      final servicoAtivo = await Geolocator.isLocationServiceEnabled();
 
-      if (!mounted) return;
-
-      setState(() {
-        _localizacao = localizacao;
-      });
-    } catch (erro) {
-      if (!mounted) return;
-
-      setState(() {
-        _erro = erro.toString().replaceFirst('Exception: ', '');
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _carregando = false;
-        });
+      if (!servicoAtivo) {
+        throw Exception(
+          'O GPS do celular está desligado. Ative a localização e tente novamente.',
+        );
       }
+
+      LocationPermission permissao = await Geolocator.checkPermission();
+
+      if (permissao == LocationPermission.denied) {
+        permissao = await Geolocator.requestPermission();
+      }
+
+      if (permissao == LocationPermission.denied) {
+        throw Exception('Permissão de localização não autorizada.');
+      }
+
+      if (permissao == LocationPermission.deniedForever) {
+        throw Exception(
+          'A permissão de localização foi bloqueada. '
+          'Abra as configurações do aplicativo e autorize a localização.',
+        );
+      }
+
+      final posicao = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.best,
+        ),
+      );
+
+      ResultadoEstaca resultado;
+
+      if (_rodoviaSelecionada == 'GO-236') {
+        resultado = await _eixoEstacaService.calcularGo236(
+          latitude: posicao.latitude,
+          longitude: posicao.longitude,
+        );
+      } else {
+        resultado = await _eixoEstacaService.calcularGo110(
+          latitude: posicao.latitude,
+          longitude: posicao.longitude,
+        );
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _posicao = posicao;
+        _resultado = resultado;
+        _carregando = false;
+      });
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _carregando = false;
+        _erro = e.toString().replaceFirst('Exception: ', '');
+      });
     }
   }
 
   void _continuar() {
-    if (_localizacao == null) return;
+    final resultado = _resultado;
+
+    if (resultado == null) {
+      return;
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
+      SnackBar(
         content: Text(
-          'A identificação de eixo, estaca e drenagem será adicionada na próxima etapa.',
+          'Estaca ${resultado.estacaFormatada} vinculada à conferência.',
         ),
+        backgroundColor: Colors.green.shade700,
       ),
     );
+
+    Navigator.pop(context, resultado);
   }
 
   @override
   Widget build(BuildContext context) {
+    final tema = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Localização automática'),
+        title: const Text('Localização Automática'),
+        centerTitle: true,
       ),
-      body: RefreshIndicator(
-        onRefresh: _obterLocalizacao,
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            _cabecalho(),
-            const SizedBox(height: 20),
-            if (_carregando) _cardCarregando(),
-            if (_erro != null) _cardErro(),
-            if (!_carregando && _erro == null && _localizacao != null)
-              ..._conteudoLocalizacao(),
-            const SizedBox(height: 24),
-            _botaoAtualizar(),
-            const SizedBox(height: 12),
-            _botaoContinuar(),
-            const SizedBox(height: 20),
-          ],
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: _atualizarLocalizacao,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              _cabecalho(tema),
+              const SizedBox(height: 20),
+              _seletorRodovia(),
+              const SizedBox(height: 16),
+              if (_carregando) _cardCarregando(),
+              if (_erro != null) _cardErro(),
+              if (_resultado != null) _cardResultado(),
+              if (!_carregando && _erro == null && _resultado == null)
+                _cardAguardando(),
+              const SizedBox(height: 24),
+              OutlinedButton.icon(
+                onPressed: _carregando ? null : _atualizarLocalizacao,
+                icon: const Icon(Icons.my_location),
+                label: const Text('ATUALIZAR GPS E ESTACA'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 54),
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: _resultado == null ? null : _continuar,
+                icon: const Icon(Icons.arrow_forward),
+                label: const Text('CONTINUAR CONFERÊNCIA'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 54),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _cabecalho() {
+  Widget _cabecalho(ThemeData tema) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [
-            AppColors.azulPrimario,
-            AppColors.azulSecundario,
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(22),
+        color: tema.colorScheme.primary,
+        borderRadius: BorderRadius.circular(16),
       ),
-      child: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: const Row(
         children: [
           Icon(
-            Icons.gps_fixed_rounded,
-            color: Colors.white,
-            size: 34,
-          ),
-          SizedBox(height: 18),
-          Text(
-            'Leitura de campo',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          SizedBox(height: 6),
-          Text(
-            'O aplicativo está obtendo sua posição atual para iniciar a conferência técnica.',
-            style: TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _cardCarregando() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: AppColors.superficie,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.borda),
-      ),
-      child: const Column(
-        children: [
-          SizedBox(
-            height: 44,
-            width: 44,
-            child: CircularProgressIndicator(
-              strokeWidth: 4,
-              color: AppColors.azulPrimario,
-            ),
-          ),
-          SizedBox(height: 20),
-          Text(
-            'Obtendo localização GPS...',
-            style: TextStyle(
-              color: AppColors.textoPrincipal,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          SizedBox(height: 7),
-          Text(
-            'Aguarde alguns segundos. Em área aberta, a precisão será melhor.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppColors.textoSecundario,
-              fontSize: 14,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _cardErro() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.erroClaro,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: AppColors.erro.withValues(alpha: 0.35),
-        ),
-      ),
-      child: Column(
-        children: [
-          const Icon(
-            Icons.location_off_rounded,
-            color: AppColors.erro,
+            Icons.route,
             size: 42,
+            color: Colors.white,
           ),
-          const SizedBox(height: 12),
-          const Text(
-            'Não foi possível obter o GPS',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppColors.erro,
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _erro ?? 'Erro desconhecido ao obter localização.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppColors.textoPrincipal,
-              fontSize: 14,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 16),
-          OutlinedButton.icon(
-            onPressed: _obterLocalizacao,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('TENTAR NOVAMENTE'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _conteudoLocalizacao() {
-    final localizacao = _localizacao!;
-
-    return [
-      _statusGps(localizacao),
-      const SizedBox(height: 16),
-      _cardCoordenadas(localizacao),
-      const SizedBox(height: 16),
-      _cardInformacoesTecnicas(localizacao),
-      const SizedBox(height: 20),
-      const Text(
-        'Próxima etapa',
-        style: TextStyle(
-          color: AppColors.textoPrincipal,
-          fontSize: 19,
-          fontWeight: FontWeight.w800,
-        ),
-      ),
-      const SizedBox(height: 8),
-      const Text(
-        'O app usará esta posição para localizar o eixo da obra, calcular estaca, offset e lado da rodovia.',
-        style: TextStyle(
-          color: AppColors.textoSecundario,
-          fontSize: 14,
-          height: 1.4,
-        ),
-      ),
-    ];
-  }
-
-  Widget _statusGps(DadosLocalizacao localizacao) {
-    final boaPrecisao = localizacao.precisao <= 10;
-    final precisaoMedia =
-        localizacao.precisao > 10 && localizacao.precisao <= 20;
-
-    final cor = boaPrecisao
-        ? AppColors.sucesso
-        : precisaoMedia
-            ? AppColors.atencao
-            : AppColors.erro;
-
-    final fundo = boaPrecisao
-        ? AppColors.sucessoClaro
-        : precisaoMedia
-            ? AppColors.atencaoClaro
-            : AppColors.erroClaro;
-
-    final situacao = boaPrecisao
-        ? 'PRECISÃO BOA'
-        : precisaoMedia
-            ? 'PRECISÃO MÉDIA'
-            : 'PRECISÃO BAIXA';
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.superficie,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.borda),
-      ),
-      child: Row(
-        children: [
-          Container(
-            height: 52,
-            width: 52,
-            decoration: BoxDecoration(
-              color: fundo,
-              borderRadius: BorderRadius.circular(15),
-            ),
-            child: Icon(
-              Icons.gps_fixed_rounded,
-              color: cor,
-              size: 28,
-            ),
-          ),
-          const SizedBox(width: 14),
-          const Expanded(
+          SizedBox(width: 14),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'GPS conectado',
+                  'POSICIONAMENTO NO EIXO',
                   style: TextStyle(
-                    color: AppColors.textoPrincipal,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
                   ),
                 ),
-                SizedBox(height: 4),
+                SizedBox(height: 5),
                 Text(
-                  'Localização obtida com sucesso.',
+                  'Estaca automática por GPS',
                   style: TextStyle(
-                    color: AppColors.textoSecundario,
-                    fontSize: 13,
+                    color: Colors.white,
+                    fontSize: 19,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 9,
-              vertical: 7,
+        ],
+      ),
+    );
+  }
+
+  Widget _seletorRodovia() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: DropdownButtonFormField<String>(
+          value: _rodoviaSelecionada,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Rodovia / eixo da obra',
+            prefixIcon: Icon(Icons.alt_route),
+            border: OutlineInputBorder(),
+          ),
+          items: const [
+            DropdownMenuItem(
+              value: 'GO-110',
+              child: Text('GO-110 — Estiva / São Domingos'),
             ),
+            DropdownMenuItem(
+              value: 'GO-236',
+              child: Text('GO-236 — Flores de Goiás / BR-020'),
+            ),
+          ],
+          onChanged: _carregando
+              ? null
+              : (valor) {
+                  if (valor == null) {
+                    return;
+                  }
+
+                  setState(() {
+                    _rodoviaSelecionada = valor;
+                    _resultado = null;
+                    _erro = null;
+                  });
+
+                  _atualizarLocalizacao();
+                },
+        ),
+      ),
+    );
+  }
+
+  Widget _cardCarregando() {
+    return const Card(
+      child: Padding(
+        padding: EdgeInsets.all(28),
+        child: Column(
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 18),
+            Text(
+              'Obtendo GPS e calculando a estaca no eixo...',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            SizedBox(height: 6),
+            Text(
+              'Aguarde alguns segundos.',
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cardAguardando() {
+    return const Card(
+      child: Padding(
+        padding: EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Icon(
+              Icons.gps_fixed,
+              size: 48,
+              color: Colors.blue,
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Aguardando localização do GPS.',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cardErro() {
+    return Card(
+      color: Colors.red.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 44,
+              color: Colors.red.shade700,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Não foi possível calcular a estaca',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.red.shade900,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _erro ?? 'Erro desconhecido.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.red.shade900),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cardResultado() {
+    final resultado = _resultado!;
+    final posicao = _posicao;
+
+    final offsetAlto = resultado.offsetMetros > 50;
+
+    return Column(
+      children: [
+        Card(
+          elevation: 2,
+          color: Colors.green.shade50,
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.check_circle,
+                  color: Colors.green.shade700,
+                  size: 44,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'EIXO IDENTIFICADO',
+                  style: TextStyle(
+                    color: Colors.green.shade800,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  resultado.rodovia,
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  resultado.nomeEixo,
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _linhaInformacao(
+          icone: Icons.signpost,
+          titulo: 'ESTACA AUTOMÁTICA',
+          valor: resultado.estacaFormatada,
+          destaque: true,
+        ),
+        _linhaInformacao(
+          icone: Icons.swap_horiz,
+          titulo: 'OFFSET AO EIXO',
+          valor: '${resultado.offsetMetros.toStringAsFixed(2)} m',
+          corValor: offsetAlto ? Colors.orange.shade800 : Colors.green.shade700,
+        ),
+        _linhaInformacao(
+          icone: resultado.lado == 'Direito'
+              ? Icons.turn_right
+              : Icons.turn_left,
+          titulo: 'LADO DA RODOVIA',
+          valor: resultado.lado,
+        ),
+        _linhaInformacao(
+          icone: Icons.location_on_outlined,
+          titulo: 'COORDENADAS GPS',
+          valor:
+              '${resultado.latitude.toStringAsFixed(6)}, '
+              '${resultado.longitude.toStringAsFixed(6)}',
+        ),
+        _linhaInformacao(
+          icone: Icons.grid_on,
+          titulo: 'UTM 23S — SIRGAS 2000',
+          valor:
+              'E ${resultado.utmEste.toStringAsFixed(3)}  |  '
+              'N ${resultado.utmNorte.toStringAsFixed(3)}',
+        ),
+        if (posicao != null)
+          _linhaInformacao(
+            icone: Icons.gps_fixed,
+            titulo: 'PRECISÃO DO GPS',
+            valor: '± ${posicao.accuracy.toStringAsFixed(1)} m',
+          ),
+        if (offsetAlto)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(top: 4),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: fundo,
-              borderRadius: BorderRadius.circular(20),
+              color: Colors.orange.shade50,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.orange.shade300),
             ),
             child: Text(
-              situacao,
+              'Atenção: o ponto está distante mais de 50 m do eixo. '
+              'Confira se a rodovia selecionada está correta.',
               style: TextStyle(
-                color: cor,
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.3,
+                color: Colors.orange.shade900,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _cardCoordenadas(DadosLocalizacao localizacao) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.azulPrimario,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(
-                Icons.location_on_outlined,
-                color: Colors.white,
-                size: 22,
-              ),
-              SizedBox(width: 8),
-              Text(
-                'COORDENADAS ATUAIS',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.8,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
-          Text(
-            localizacao.coordenadasFormatadas,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.3,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Precisão estimada: ${localizacao.precisaoFormatada}',
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _cardInformacoesTecnicas(DadosLocalizacao localizacao) {
-    final dataFormatada =
-        DateFormat('dd/MM/yyyy HH:mm:ss', 'pt_BR').format(localizacao.dataHora);
-
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.superficie,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.borda),
-      ),
-      child: Column(
-        children: [
-          _linhaInformacao(
-            icone: Icons.my_location_rounded,
-            titulo: 'Precisão GPS',
-            valor: localizacao.precisaoFormatada,
-          ),
-          const Divider(height: 24),
-          _linhaInformacao(
-            icone: Icons.terrain_outlined,
-            titulo: 'Altitude',
-            valor: '${localizacao.altitude.toStringAsFixed(1)} m',
-          ),
-          const Divider(height: 24),
-          _linhaInformacao(
-            icone: Icons.speed_rounded,
-            titulo: 'Velocidade',
-            valor: '${(localizacao.velocidade * 3.6).toStringAsFixed(1)} km/h',
-          ),
-          const Divider(height: 24),
-          _linhaInformacao(
-            icone: Icons.access_time_rounded,
-            titulo: 'Data e hora',
-            valor: dataFormatada,
-          ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -451,67 +450,34 @@ class _LocalizacaoAutomaticaScreenState
     required IconData icone,
     required String titulo,
     required String valor,
+    bool destaque = false,
+    Color? corValor,
   }) {
-    return Row(
-      children: [
-        Container(
-          height: 38,
-          width: 38,
-          decoration: BoxDecoration(
-            color: AppColors.azulClaro,
-            borderRadius: BorderRadius.circular(11),
-          ),
-          child: Icon(
-            icone,
-            color: AppColors.azulPrimario,
-            size: 20,
+    return Card(
+      child: ListTile(
+        leading: Icon(
+          icone,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+        title: Text(
+          titulo,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
           ),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            titulo,
-            style: const TextStyle(
-              color: AppColors.textoSecundario,
-              fontSize: 14,
-            ),
-          ),
-        ),
-        Flexible(
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
           child: Text(
             valor,
-            textAlign: TextAlign.end,
-            style: const TextStyle(
-              color: AppColors.textoPrincipal,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
+            style: TextStyle(
+              fontSize: destaque ? 22 : 15,
+              fontWeight: destaque ? FontWeight.bold : FontWeight.w600,
+              color: corValor,
             ),
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _botaoAtualizar() {
-    return SizedBox(
-      height: 52,
-      width: double.infinity,
-      child: OutlinedButton.icon(
-        onPressed: _carregando ? null : _obterLocalizacao,
-        icon: const Icon(Icons.refresh_rounded),
-        label: const Text('ATUALIZAR LOCALIZAÇÃO'),
-      ),
-    );
-  }
-
-  Widget _botaoContinuar() {
-    return SizedBox(
-      height: 58,
-      width: double.infinity,
-      child: ElevatedButton.icon(
-        onPressed: _localizacao == null || _carregando ? null : _continuar,
-        icon: const Icon(Icons.arrow_forward_rounded),
-        label: const Text('CONTINUAR CONFERÊNCIA'),
       ),
     );
   }
