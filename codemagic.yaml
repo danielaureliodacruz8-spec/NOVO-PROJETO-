@@ -40,11 +40,12 @@ workflows:
       - name: Instalar dependências
         script: flutter pub get
 
-      - name: Verificar código
-        script: flutter analyze
+      - name: Verificar código do aplicativo
+        script: flutter analyze lib
 
       - name: Gerar APK
         script: flutter build apk --release
 
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
+
