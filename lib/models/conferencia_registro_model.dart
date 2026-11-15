@@ -14,10 +14,12 @@ class ConferenciaRegistroModel {
   final String observacao;
   final DateTime dataHora;
 
-  // Medidas em metros ou na unidade indicada pelo projeto.
   final Map<String, double> medidasProjeto;
   final Map<String, double> medidasExecutadas;
   final Map<String, double> tolerancias;
+
+  // Volume de concreto calculado em metros cúbicos.
+  final double? volumeConcretoM3;
 
   const ConferenciaRegistroModel({
     required this.id,
@@ -36,6 +38,7 @@ class ConferenciaRegistroModel {
     this.medidasProjeto = const {},
     this.medidasExecutadas = const {},
     this.tolerancias = const {},
+    this.volumeConcretoM3,
   });
 
   int get quantidadeItensConcluidos =>
@@ -47,7 +50,6 @@ class ConferenciaRegistroModel {
       quantidadeItens > 0 &&
       quantidadeItensConcluidos == quantidadeItens;
 
-  // Resultado automático da conferência.
   String get statusConferencia {
     if (medidasExecutadas.isEmpty) return 'Pendente';
 
@@ -91,6 +93,7 @@ class ConferenciaRegistroModel {
       'medidasProjeto': medidasProjeto,
       'medidasExecutadas': medidasExecutadas,
       'tolerancias': tolerancias,
+      'volumeConcretoM3': volumeConcretoM3,
     };
   }
 
@@ -114,6 +117,7 @@ class ConferenciaRegistroModel {
       medidasProjeto: _converterMapaDouble(map['medidasProjeto']),
       medidasExecutadas: _converterMapaDouble(map['medidasExecutadas']),
       tolerancias: _converterMapaDouble(map['tolerancias']),
+      volumeConcretoM3: _converterDoubleNulo(map['volumeConcretoM3']),
     );
   }
 
@@ -134,6 +138,7 @@ class ConferenciaRegistroModel {
     Map<String, double>? medidasProjeto,
     Map<String, double>? medidasExecutadas,
     Map<String, double>? tolerancias,
+    double? volumeConcretoM3,
   }) {
     return ConferenciaRegistroModel(
       id: id ?? this.id,
@@ -154,6 +159,7 @@ class ConferenciaRegistroModel {
       medidasProjeto: medidasProjeto ?? this.medidasProjeto,
       medidasExecutadas: medidasExecutadas ?? this.medidasExecutadas,
       tolerancias: tolerancias ?? this.tolerancias,
+      volumeConcretoM3: volumeConcretoM3 ?? this.volumeConcretoM3,
     );
   }
 
