@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../models/conferencia_model.dart';
+import '../theme/app_theme.dart';
 
 class ConferenciaScreen extends StatefulWidget {
   const ConferenciaScreen({super.key});
@@ -10,80 +10,23 @@ class ConferenciaScreen extends StatefulWidget {
 }
 
 class _ConferenciaScreenState extends State<ConferenciaScreen> {
-  final _obraController = TextEditingController();
-  final _rodoviaController = TextEditingController();
-  final _trechoController = TextEditingController();
-  final _estacaController = TextEditingController();
-  final _offsetController = TextEditingController();
-  final _observacaoController = TextEditingController();
+  int _abaSelecionada = 0;
 
-  String _lado = 'DIREITO';
-
-  @override
-  void dispose() {
-    _obraController.dispose();
-    _rodoviaController.dispose();
-    _trechoController.dispose();
-    _estacaController.dispose();
-    _offsetController.dispose();
-    _observacaoController.dispose();
-    super.dispose();
-  }
-
-  String _dataAgora() {
-    final agora = DateTime.now();
-
-    String doisDigitos(int numero) {
-      return numero.toString().padLeft(2, '0');
-    }
-
-    return '${doisDigitos(agora.day)}/${doisDigitos(agora.month)}/'
-        '${agora.year} '
-        '${doisDigitos(agora.hour)}:${doisDigitos(agora.minute)}';
-  }
-
-  void _salvar() {
-    if (_estacaController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Informe pelo menos a estaca.'),
+  void _iniciarConferenciaAutomatica() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'A tela de localização automática será adicionada no próximo arquivo.',
         ),
-      );
-      return;
-    }
-
-    final conferencia = Conferencia(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      obra: _obraController.text.trim(),
-      rodovia: _rodoviaController.text.trim(),
-      trecho: _trechoController.text.trim(),
-      estaca: _estacaController.text.trim(),
-      offset: _offsetController.text.trim(),
-      lado: _lado,
-      observacao: _observacaoController.text.trim(),
-      dataCriacao: _dataAgora(),
-      medicoes: [],
-      fotos: [],
+      ),
     );
-
-    Navigator.pop(context, conferencia);
   }
 
-  Widget _campo({
-    required TextEditingController controller,
-    required String titulo,
-    TextInputType tipoTeclado = TextInputType.text,
-    int linhas = 1,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: TextField(
-        controller: controller,
-        keyboardType: tipoTeclado,
-        maxLines: linhas,
-        decoration: InputDecoration(
-          labelText: titulo,
-          border: const OutlineInputBorder(),
+  void _novaConferenciaManual() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'A conferência manual será integrada à nova versão em seguida.',
         ),
       ),
     );
@@ -92,83 +35,195 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Nova conferência'),
+      body: SafeArea(
+        child: IndexedStack(
+          index: _abaSelecionada,
+          children: [
+            _telaInicio(),
+            _telaHistorico(),
+          ],
+        ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          _campo(
-            controller: _obraController,
-            titulo: 'Obra',
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _abaSelecionada,
+        onDestinationSelected: (index) {
+          setState(() {
+            _abaSelecionada = index;
+          });
+        },
+        indicatorColor: AppColors.azulClaro,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'Início',
           ),
-          _campo(
-            controller: _rodoviaController,
-            titulo: 'Rodovia',
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
+            label: 'Histórico',
           ),
-          _campo(
-            controller: _trechoController,
-            titulo: 'Trecho',
-          ),
-          _campo(
-            controller: _estacaController,
-            titulo: 'Estaca *',
-          ),
-          _campo(
-            controller: _offsetController,
-            titulo: 'Offset (m)',
-            tipoTeclado: const TextInputType.numberWithOptions(
-              decimal: true,
-              signed: true,
-            ),
-          ),
-          const Text(
-            'Lado da rodovia',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-          DropdownButton<String>(
-            value: _lado,
-            isExpanded: true,
-            items: const [
-              DropdownMenuItem(
-                value: 'DIREITO',
-                child: Text('DIREITO'),
-              ),
-              DropdownMenuItem(
-                value: 'ESQUERDO',
-                child: Text('ESQUERDO'),
-              ),
-              DropdownMenuItem(
-                value: 'EIXO',
-                child: Text('EIXO'),
-              ),
-            ],
-            onChanged: (valor) {
-              if (valor == null) return;
-
-              setState(() {
-                _lado = valor;
-              });
-            },
-          ),
-          const SizedBox(height: 14),
-          _campo(
-            controller: _observacaoController,
-            titulo: 'Observação geral',
-            linhas: 4,
-          ),
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: _salvar,
-            icon: const Icon(Icons.save),
-            label: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 14),
-              child: Text('Salvar conferência'),
-            ),
-          ),
-          const SizedBox(height: 30),
         ],
       ),
     );
   }
-}
+
+  Widget _telaInicio() {
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: _cabecalho(),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+          sliver: SliverList(
+            delegate: SliverChildListDelegate(
+              [
+                _tituloBoasVindas(),
+                const SizedBox(height: 20),
+                _cardGps(),
+                const SizedBox(height: 16),
+                _cardLocalizacao(),
+                const SizedBox(height: 24),
+                _botaoIniciar(),
+                const SizedBox(height: 14),
+                _botaoManual(),
+                const SizedBox(height: 28),
+                _tituloSecao(
+                  titulo: 'Resumo de campo',
+                  subtitulo: 'Acompanhe as conferências realizadas.',
+                ),
+                const SizedBox(height: 14),
+                _resumoConferencias(),
+                const SizedBox(height: 28),
+                _tituloSecao(
+                  titulo: 'Como funciona',
+                  subtitulo: 'Fluxo da conferência automática.',
+                ),
+                const SizedBox(height: 14),
+                _etapasAutomaticas(),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _cabecalho() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 26),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.azulPrimario,
+            AppColors.azulSecundario,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.vertical(
+          bottom: Radius.circular(30),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            height: 54,
+            width: 54,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.25),
+              ),
+            ),
+            child: const Icon(
+              Icons.engineering_outlined,
+              color: Colors.white,
+              size: 30,
+            ),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'STRATA CONFERÊNCIA',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  'Fiscalização de Drenagem',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            height: 42,
+            width: 42,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(
+              Icons.notifications_none_rounded,
+              color: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tituloBoasVindas() {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Conferência de campo',
+          style: TextStyle(
+            color: AppColors.textoPrincipal,
+            fontSize: 25,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        SizedBox(height: 6),
+        Text(
+          'Inicie uma nova vistoria com localização, medições e fotos técnicas.',
+          style: TextStyle(
+            color: AppColors.textoSecundario,
+            fontSize: 15,
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _cardGps() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.superficie,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.borda),
+      ),
+      child: Row(
+        children: [
+          Container(
+            height: 48,
+            width: 48,
+            decoration: BoxDecoration(
+              color: AppColors
