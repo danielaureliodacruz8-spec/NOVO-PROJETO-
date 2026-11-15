@@ -1,7 +1,10 @@
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../models/drenagem_model.dart';
 import '../services/eixo_estaca_service.dart';
+import 'roteiro_drenagem_screen.dart';
 
 class LocalizacaoAutomaticaScreen extends StatefulWidget {
   const LocalizacaoAutomaticaScreen({super.key});
@@ -18,9 +21,13 @@ class _LocalizacaoAutomaticaScreenState
   String _rodoviaSelecionada = 'GO-110';
 
   bool _carregando = false;
+  bool _abrindoRoteiro = false;
+
   String? _erro;
   Position? _posicao;
   ResultadoEstaca? _resultado;
+
+  DrenagemModel? _drenagemSelecionada;
 
   @override
   void initState() {
@@ -36,28 +43,32 @@ class _LocalizacaoAutomaticaScreenState
     });
 
     try {
-      final servicoAtivo = await Geolocator.isLocationServiceEnabled();
+      final servicoAtivo =
+          await Geolocator.isLocationServiceEnabled();
 
       if (!servicoAtivo) {
         throw Exception(
-          'O GPS do celular está desligado. Ative a localização e tente novamente.',
+          'O GPS do celular está desligado. Ative a localização.',
         );
       }
 
-      LocationPermission permissao = await Geolocator.checkPermission();
+      LocationPermission permissao =
+          await Geolocator.checkPermission();
 
       if (permissao == LocationPermission.denied) {
         permissao = await Geolocator.requestPermission();
       }
 
       if (permissao == LocationPermission.denied) {
-        throw Exception('Permissão de localização não autorizada.');
+        throw Exception(
+          'Permissão de localização não autorizada.',
+        );
       }
 
       if (permissao == LocationPermission.deniedForever) {
         throw Exception(
-          'A permissão de localização foi bloqueada. '
-          'Abra as configurações do aplicativo e autorize a localização.',
+          'A permissão foi bloqueada. Autorize a localização '
+          'nas configurações do aplicativo.',
         );
       }
 
@@ -81,9 +92,7 @@ class _LocalizacaoAutomaticaScreenState
         );
       }
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         _posicao = posicao;
@@ -91,9 +100,7 @@ class _LocalizacaoAutomaticaScreenState
         _carregando = false;
       });
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         _carregando = false;
@@ -102,23 +109,59 @@ class _LocalizacaoAutomaticaScreenState
     }
   }
 
-  void _continuar() {
+  Future<void> _continuar() async {
     final resultado = _resultado;
+    final drenagem = _drenagemSelecionada;
 
-    if (resultado == null) {
+    if (resultado == null || drenagem == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Selecione um dispositivo de drenagem.',
+          ),
+        ),
+      );
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Estaca ${resultado.estacaFormatada} vinculada à conferência.',
-        ),
-        backgroundColor: Colors.green.shade700,
-      ),
-    );
+    setState(() {
+      _abrindoRoteiro = true;
+    });
 
-    Navigator.pop(context, resultado);
+    try {
+      final dados = await Navigator.push<Map<String, dynamic>>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => RoteiroDrenagemScreen(
+            drenagem: drenagem,
+            resultadoEstaca: resultado,
+            precisaoMetros: _posicao?.accuracy,
+            distanciaMetros: null,
+            pontoDrenagem: null,
+          ),
+        ),
+      );
+
+      if (!mounted) return;
+
+      if (dados != null) {
+        Navigator.pop(context, dados);
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erro ao abrir roteiro: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _abrindoRoteiro = false;
+        });
+      }
+    }
   }
 
   @override
@@ -140,25 +183,54 @@ class _LocalizacaoAutomaticaScreenState
               const SizedBox(height: 20),
               _seletorRodovia(),
               const SizedBox(height: 16),
+
               if (_carregando) _cardCarregando(),
               if (_erro != null) _cardErro(),
-              if (_resultado != null) _cardResultado(),
-              if (!_carregando && _erro == null && _resultado == null)
+              if (_resultado != null) ...[
+                _cardResultado(),
+                const SizedBox(height: 16),
+                _seletorDispositivo(),
+              ],
+
+              if (!_carregando &&
+                  _erro == null &&
+                  _resultado == null)
                 _cardAguardando(),
+
               const SizedBox(height: 24),
+
               OutlinedButton.icon(
-                onPressed: _carregando ? null : _atualizarLocalizacao,
+                onPressed:
+                    _carregando ? null : _atualizarLocalizacao,
                 icon: const Icon(Icons.my_location),
                 label: const Text('ATUALIZAR GPS E ESTACA'),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size(double.infinity, 54),
                 ),
               ),
+
               const SizedBox(height: 12),
+
               FilledButton.icon(
-                onPressed: _resultado == null ? null : _continuar,
-                icon: const Icon(Icons.arrow_forward),
-                label: const Text('CONTINUAR CONFERÊNCIA'),
+                onPressed: _resultado == null ||
+                        _drenagemSelecionada == null ||
+                        _abrindoRoteiro
+                    ? null
+                    : _continuar,
+                icon: _abrindoRoteiro
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.arrow_forward),
+                label: Text(
+                  _abrindoRoteiro
+                      ? 'ABRINDO ROTEIRO...'
+                      : 'CONTINUAR CONFERÊNCIA',
+                ),
                 style: FilledButton.styleFrom(
                   minimumSize: const Size(double.infinity, 54),
                 ),
@@ -240,18 +312,113 @@ class _LocalizacaoAutomaticaScreenState
           onChanged: _carregando
               ? null
               : (valor) {
-                  if (valor == null) {
-                    return;
-                  }
+                  if (valor == null) return;
 
                   setState(() {
                     _rodoviaSelecionada = valor;
                     _resultado = null;
                     _erro = null;
+                    _drenagemSelecionada = null;
                   });
 
                   _atualizarLocalizacao();
                 },
+        ),
+      ),
+    );
+  }
+
+  Widget _seletorDispositivo() {
+    if (_rodoviaSelecionada != 'GO-236') {
+      return Card(
+        color: Colors.orange.shade50,
+        child: const Padding(
+          padding: EdgeInsets.all(16),
+          child: Text(
+            'O catálogo de dispositivos disponível atualmente '
+            'é da GO-236. Para a GO-110, precisamos cadastrar '
+            'os dispositivos específicos dessa rodovia.',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+      );
+    }
+
+    final dispositivos =
+        CatalogoDrenagemSuperficial.dispositivos;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.water_damage_outlined),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'SELECIONAR DISPOSITIVO',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Escolha o tipo e modelo encontrado em campo.',
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<DrenagemModel>(
+              value: _drenagemSelecionada,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Dispositivo de drenagem',
+                prefixIcon: Icon(Icons.construction),
+                border: OutlineInputBorder(),
+              ),
+              items: dispositivos.map((dispositivo) {
+                return DropdownMenuItem<DrenagemModel>(
+                  value: dispositivo,
+                  child: Text(
+                    dispositivo.codigo,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                );
+              }).toList(),
+              onChanged: (valor) {
+                setState(() {
+                  _drenagemSelecionada = valor;
+                });
+              },
+            ),
+            if (_drenagemSelecionada != null) ...[
+              const SizedBox(height: 14),
+              Text(
+                _drenagemSelecionada!.identificacao,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(_drenagemSelecionada!.dimensoesResumidas),
+              if (_drenagemSelecionada!.norma != null)
+                Text(
+                  'Norma: ${_drenagemSelecionada!.norma}',
+                ),
+              if (_drenagemSelecionada!.observacao != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    _drenagemSelecionada!.observacao!,
+                  ),
+                ),
+            ],
+          ],
         ),
       ),
     );
@@ -340,7 +507,6 @@ class _LocalizacaoAutomaticaScreenState
   Widget _cardResultado() {
     final resultado = _resultado!;
     final posicao = _posicao;
-
     final offsetAlto = resultado.offsetMetros > 50;
 
     return Column(
@@ -394,7 +560,9 @@ class _LocalizacaoAutomaticaScreenState
           icone: Icons.swap_horiz,
           titulo: 'OFFSET AO EIXO',
           valor: '${resultado.offsetMetros.toStringAsFixed(2)} m',
-          corValor: offsetAlto ? Colors.orange.shade800 : Colors.green.shade700,
+          corValor: offsetAlto
+              ? Colors.orange.shade800
+              : Colors.green.shade700,
         ),
         _linhaInformacao(
           icone: resultado.lado == 'Direito'
@@ -431,11 +599,13 @@ class _LocalizacaoAutomaticaScreenState
             decoration: BoxDecoration(
               color: Colors.orange.shade50,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.orange.shade300),
+              border: Border.all(
+                color: Colors.orange.shade300,
+              ),
             ),
             child: Text(
-              'Atenção: o ponto está distante mais de 50 m do eixo. '
-              'Confira se a rodovia selecionada está correta.',
+              'Atenção: o ponto está distante mais de 50 m '
+              'do eixo. Confira se a rodovia selecionada está correta.',
               style: TextStyle(
                 color: Colors.orange.shade900,
                 fontWeight: FontWeight.w600,
@@ -473,7 +643,8 @@ class _LocalizacaoAutomaticaScreenState
             valor,
             style: TextStyle(
               fontSize: destaque ? 22 : 15,
-              fontWeight: destaque ? FontWeight.bold : FontWeight.w600,
+              fontWeight:
+                  destaque ? FontWeight.bold : FontWeight.w600,
               color: corValor,
             ),
           ),
