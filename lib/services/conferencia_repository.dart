@@ -1,3 +1,4 @@
+
 import '../models/conferencia_registro_model.dart';
 import 'conferencia_storage_service.dart';
 
@@ -16,16 +17,29 @@ class ConferenciaRepository {
       );
   }
 
-  Future<void> adicionar(ConferenciaRegistroModel conferencia) async {
-    await _storageService.adicionarConferencia(conferencia.toMap());
+  Future<void> adicionar(
+    ConferenciaRegistroModel conferencia,
+  ) async {
+    await _storageService.adicionarConferencia(
+      conferencia.toMap(),
+    );
   }
 
-  Future<void> atualizar(ConferenciaRegistroModel conferencia) async {
-    await _storageService.atualizarConferencia(conferencia.toMap());
+  Future<void> atualizar(
+    ConferenciaRegistroModel conferencia,
+  ) async {
+    await _storageService.atualizarConferencia(
+      conferencia.toMap(),
+    );
   }
 
   Future<void> remover(String id) async {
     await _storageService.removerConferencia(id);
+  }
+
+  // Compatibilidade com a chamada excluir() da tela.
+  Future<void> excluir(String id) async {
+    await remover(id);
   }
 
   Future<void> limpar() async {
