@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'localizacao_automatica_screen.dart';
 
 class ConferenciaScreen extends StatefulWidget {
   const ConferenciaScreen({super.key});
@@ -13,11 +14,9 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
   int _abaSelecionada = 0;
 
   void _iniciarConferenciaAutomatica() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'A tela de localização automática será adicionada no próximo arquivo.',
-        ),
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const LocalizacaoAutomaticaScreen(),
       ),
     );
   }
