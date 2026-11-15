@@ -123,6 +123,7 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
       id: _uuid.v4(),
       codigoDrenagem: drenagem.codigo,
       identificacaoDrenagem: drenagem.identificacao,
+      rodovia: drenagem.rodovia,
       estaca: estaca,
       lado: lado,
       latitude: _converterDouble(resultado['latitude']),
@@ -569,7 +570,7 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '$estaca • $lado',
+                      '${conferencia.rodovia.isNotEmpty ? conferencia.rodovia : 'Rodovia não informada'} • $estaca • $lado',
                       style: TextStyle(
                         color: Colors.grey.shade700,
                         fontSize: 12,
@@ -643,6 +644,12 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
                 _linhaDetalhe(
                   'Dispositivo',
                   conferencia.identificacaoDrenagem,
+                ),
+                _linhaDetalhe(
+                  'Rodovia',
+                  conferencia.rodovia.isNotEmpty
+                      ? conferencia.rodovia
+                      : 'Não informada',
                 ),
                 _linhaDetalhe(
                   'Estaca',
