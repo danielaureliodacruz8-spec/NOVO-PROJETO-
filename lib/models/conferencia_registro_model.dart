@@ -1,3 +1,4 @@
+
 class ConferenciaRegistroModel {
   final String id;
   final String codigoDrenagem;
@@ -13,6 +14,11 @@ class ConferenciaRegistroModel {
   final String observacao;
   final DateTime dataHora;
 
+  // Medidas em metros ou na unidade indicada pelo projeto.
+  final Map<String, double> medidasProjeto;
+  final Map<String, double> medidasExecutadas;
+  final Map<String, double> tolerancias;
+
   const ConferenciaRegistroModel({
     required this.id,
     required this.codigoDrenagem,
@@ -27,18 +33,44 @@ class ConferenciaRegistroModel {
     this.distanciaDispositivoMetros,
     this.fotos = const [],
     this.observacao = '',
+    this.medidasProjeto = const {},
+    this.medidasExecutadas = const {},
+    this.tolerancias = const {},
   });
 
-  int get quantidadeItensConcluidos {
-    return itensConcluidos.where((item) => item).length;
-  }
+  int get quantidadeItensConcluidos =>
+      itensConcluidos.where((item) => item).length;
 
-  int get quantidadeItens {
-    return itensConcluidos.length;
-  }
+  int get quantidadeItens => itensConcluidos.length;
 
-  bool get roteiroConcluido {
-    return quantidadeItens > 0 && quantidadeItensConcluidos == quantidadeItens;
+  bool get roteiroConcluido =>
+      quantidadeItens > 0 &&
+      quantidadeItensConcluidos == quantidadeItens;
+
+  // Resultado automático da conferência.
+  String get statusConferencia {
+    if (medidasExecutadas.isEmpty) return 'Pendente';
+
+    for (final chave in medidasExecutadas.keys) {
+      final projeto = medidasProjeto[chave];
+      final executado = medidasExecutadas[chave];
+      final tolerancia = tolerancias[chave];
+
+      if (projeto == null || executado == null || tolerancia == null) {
+        return 'Pendente';
+      }
+
+      if ((executado - projeto).abs() > tolerancia) {
+        return 'Reprovado';
+      }
+    }
+
+    if (medidasProjeto.isEmpty ||
+        medidasExecutadas.length != medidasProjeto.length) {
+      return 'Pendente';
+    }
+
+    return 'Aprovado';
   }
 
   Map<String, dynamic> toMap() {
@@ -56,6 +88,9 @@ class ConferenciaRegistroModel {
       'fotos': fotos,
       'observacao': observacao,
       'dataHora': dataHora.toIso8601String(),
+      'medidasProjeto': medidasProjeto,
+      'medidasExecutadas': medidasExecutadas,
+      'tolerancias': tolerancias,
     };
   }
 
@@ -63,7 +98,8 @@ class ConferenciaRegistroModel {
     return ConferenciaRegistroModel(
       id: map['id']?.toString() ?? '',
       codigoDrenagem: map['codigoDrenagem']?.toString() ?? '',
-      identificacaoDrenagem: map['identificacaoDrenagem']?.toString() ?? '',
+      identificacaoDrenagem:
+          map['identificacaoDrenagem']?.toString() ?? '',
       estaca: map['estaca']?.toString(),
       lado: map['lado']?.toString(),
       latitude: _converterDouble(map['latitude']),
@@ -75,6 +111,9 @@ class ConferenciaRegistroModel {
       fotos: _converterListaString(map['fotos']),
       observacao: map['observacao']?.toString() ?? '',
       dataHora: _converterData(map['dataHora']),
+      medidasProjeto: _converterMapaDouble(map['medidasProjeto']),
+      medidasExecutadas: _converterMapaDouble(map['medidasExecutadas']),
+      tolerancias: _converterMapaDouble(map['tolerancias']),
     );
   }
 
@@ -92,6 +131,9 @@ class ConferenciaRegistroModel {
     List<String>? fotos,
     String? observacao,
     DateTime? dataHora,
+    Map<String, double>? medidasProjeto,
+    Map<String, double>? medidasExecutadas,
+    Map<String, double>? tolerancias,
   }) {
     return ConferenciaRegistroModel(
       id: id ?? this.id,
@@ -109,6 +151,9 @@ class ConferenciaRegistroModel {
       fotos: fotos ?? this.fotos,
       observacao: observacao ?? this.observacao,
       dataHora: dataHora ?? this.dataHora,
+      medidasProjeto: medidasProjeto ?? this.medidasProjeto,
+      medidasExecutadas: medidasExecutadas ?? this.medidasExecutadas,
+      tolerancias: tolerancias ?? this.tolerancias,
     );
   }
 
@@ -134,8 +179,22 @@ class ConferenciaRegistroModel {
 
   static List<String> _converterListaString(dynamic valor) {
     if (valor is! List) return [];
-
     return valor.map((item) => item.toString()).toList();
+  }
+
+  static Map<String, double> _converterMapaDouble(dynamic valor) {
+    if (valor is! Map) return {};
+
+    final resultado = <String, double>{};
+
+    valor.forEach((chave, medida) {
+      final numero = _converterDoubleNulo(medida);
+      if (numero != null) {
+        resultado[chave.toString()] = numero;
+      }
+    });
+
+    return resultado;
   }
 
   static DateTime _converterData(dynamic valor) {
