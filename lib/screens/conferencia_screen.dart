@@ -46,18 +46,19 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
       setState(() {
         _carregandoHistorico = false;
       });
+
+      _mostrarMensagem('Erro ao carregar histórico.', erro: true);
     }
   }
 
   Future<void> _iniciarConferencia() async {
     if (_iniciando) return;
 
-    setState(() {
-      _iniciando = true;
-    });
+    setState(() => _iniciando = true);
 
     try {
-      final resultado = await Navigator.of(context).push<Map<String, dynamic>>(
+      final resultado =
+          await Navigator.of(context).push<Map<String, dynamic>>(
         MaterialPageRoute(
           builder: (_) => const LocalizacaoAutomaticaScreen(),
         ),
@@ -69,7 +70,7 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
 
       if (conferencia == null) {
         _mostrarMensagem(
-          'Não foi possível preparar os dados da conferência.',
+          'Dados incompletos. Confira a drenagem e tente novamente.',
           erro: true,
         );
         return;
@@ -84,18 +85,16 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
       });
 
       _mostrarMensagem('Conferência salva no celular com sucesso.');
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
 
       _mostrarMensagem(
-        'Não foi possível salvar a conferência.',
+        'Erro ao salvar conferência: $e',
         erro: true,
       );
     } finally {
       if (mounted) {
-        setState(() {
-          _iniciando = false;
-        });
+        setState(() => _iniciando = false);
       }
     }
   }
@@ -105,20 +104,17 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
   ) {
     final drenagem = resultado['drenagem'];
 
-    if (drenagem is! DrenagemModel) {
-      return null;
-    }
+    if (drenagem is! DrenagemModel) return null;
 
-    final ponto = resultado['pontoDrenagem'];
-    final itens = resultado['itensConcluidos'];
+    final itens = _converterItens(resultado['itensConcluidos']);
 
-    String? estaca;
-    String? lado;
+    final estaca =
+        resultado['estaca']?.toString() ??
+        _obterPropriedade(resultado['pontoDrenagem'], 'estaca');
 
-    try {
-      estaca = ponto?.estaca?.toString();
-      lado = ponto?.lado?.toString();
-    } catch (_) {}
+    final lado =
+        resultado['lado']?.toString() ??
+        _obterPropriedade(resultado['pontoDrenagem'], 'lado');
 
     return ConferenciaRegistroModel(
       id: _uuid.v4(),
@@ -128,15 +124,32 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
       lado: lado,
       latitude: _converterDouble(resultado['latitude']),
       longitude: _converterDouble(resultado['longitude']),
-      precisaoMetros: _converterDoubleNulo(resultado['precisaoMetros']),
+      precisaoMetros:
+          _converterDoubleNulo(resultado['precisaoMetros']),
       distanciaDispositivoMetros:
           _converterDoubleNulo(resultado['distanciaMetros']),
-      itensConcluidos: _converterItens(itens),
+      itensConcluidos: itens,
       observacao: resultado['observacao']?.toString() ?? '',
       dataHora: resultado['dataHora'] is DateTime
           ? resultado['dataHora'] as DateTime
           : DateTime.now(),
     );
+  }
+
+  String? _obterPropriedade(dynamic objeto, String propriedade) {
+    if (objeto == null) return null;
+
+    try {
+      if (propriedade == 'estaca') {
+        return objeto.estaca?.toString();
+      }
+
+      if (propriedade == 'lado') {
+        return objeto.lado?.toString();
+      }
+    } catch (_) {}
+
+    return null;
   }
 
   double _converterDouble(dynamic valor) {
@@ -159,9 +172,15 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
     );
   }
 
-  List<String> _converterItens(dynamic itens) {
+  List<bool> _converterItens(dynamic itens) {
+    if (itens is List<bool>) return itens;
+
+    if (itens is List<String>) {
+      return itens.map((_) => true).toList();
+    }
+
     if (itens is List) {
-      return itens.map((item) => item.toString()).toList();
+      return itens.map((item) => item == true).toList();
     }
 
     return [];
@@ -174,7 +193,8 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(mensagem),
-        backgroundColor: erro ? Colors.red.shade700 : Colors.green.shade700,
+        backgroundColor:
+            erro ? Colors.red.shade700 : Colors.green.shade700,
       ),
     );
   }
@@ -184,28 +204,26 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
   ) async {
     final confirmar = await showDialog<bool>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Excluir conferência'),
-          content: Text(
-            'Deseja excluir a conferência '
-            '${conferencia.codigoDrenagem}?',
+      builder: (context) => AlertDialog(
+        title: const Text('Excluir conferência'),
+        content: Text(
+          'Deseja excluir a conferência '
+          '${conferencia.codigoDrenagem}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCELAR'),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('CANCELAR'),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
             ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.red.shade700,
-              ),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('EXCLUIR'),
-            ),
-          ],
-        );
-      },
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('EXCLUIR'),
+          ),
+        ],
+      ),
     );
 
     if (confirmar != true) return;
@@ -290,11 +308,7 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
         children: [
           Row(
             children: [
-              Icon(
-                Icons.engineering,
-                color: Colors.white,
-                size: 40,
-              ),
+              Icon(Icons.engineering, color: Colors.white, size: 40),
               SizedBox(width: 12),
               Expanded(
                 child: Text(
@@ -322,10 +336,7 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
           SizedBox(height: 5),
           Text(
             'Fiscalização e conferência técnica de dispositivos de drenagem.',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-            ),
+            style: TextStyle(color: Colors.white, fontSize: 14),
           ),
         ],
       ),
@@ -466,17 +477,13 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
               const SizedBox(height: 12),
               const Text(
                 'Nenhuma conferência registrada.',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 5),
               Text(
                 'Inicie uma conferência para salvar os dados de drenagem.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.grey.shade700,
-                ),
+                style: TextStyle(color: Colors.grey.shade700),
               ),
             ],
           ),
@@ -632,11 +639,11 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
                       : 'Não informada',
                 ),
                 _linhaDetalhe('Data e hora', dataFormatada),
-                if (conferencia.itensConcluidos.isNotEmpty)
-                  _linhaDetalhe(
-                    'Itens concluídos',
-                    conferencia.itensConcluidos.join(', '),
-                  ),
+                _linhaDetalhe(
+                  'Itens concluídos',
+                  '${conferencia.quantidadeItensConcluidos} de '
+                  '${conferencia.quantidadeItens}',
+                ),
                 if (conferencia.observacao.trim().isNotEmpty)
                   _linhaDetalhe(
                     'Observação',
@@ -660,17 +667,12 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
             width: 125,
             child: Text(
               '$titulo:',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
-          Expanded(
-            child: Text(valor),
-          ),
+          Expanded(child: Text(valor)),
         ],
       ),
     );
   }
 }
-```
