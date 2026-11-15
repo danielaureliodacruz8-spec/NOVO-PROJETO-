@@ -7,6 +7,7 @@ workflows:
 
     environment:
       flutter: stable
+      java: 21
 
     scripts:
       - name: Criar estrutura Android
@@ -37,6 +38,9 @@ workflows:
           arquivo.write_text(texto)
           PY
 
+      - name: Conferir Java
+        script: java -version
+
       - name: Instalar dependências
         script: flutter pub get
 
@@ -45,5 +49,4 @@ workflows:
 
     artifacts:
       - build/app/outputs/flutter-apk/app-release.apk
-
 
