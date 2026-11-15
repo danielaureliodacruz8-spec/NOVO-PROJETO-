@@ -3,6 +3,7 @@ class ConferenciaRegistroModel {
   final String id;
   final String codigoDrenagem;
   final String identificacaoDrenagem;
+  final String rodovia;
   final String? estaca;
   final String? lado;
   final double latitude;
@@ -17,8 +18,6 @@ class ConferenciaRegistroModel {
   final Map<String, double> medidasProjeto;
   final Map<String, double> medidasExecutadas;
   final Map<String, double> tolerancias;
-
-  // Volume de concreto calculado em metros cúbicos.
   final double? volumeConcretoM3;
 
   const ConferenciaRegistroModel({
@@ -29,6 +28,7 @@ class ConferenciaRegistroModel {
     required this.longitude,
     required this.itensConcluidos,
     required this.dataHora,
+    this.rodovia = '',
     this.estaca,
     this.lado,
     this.precisaoMetros,
@@ -80,6 +80,7 @@ class ConferenciaRegistroModel {
       'id': id,
       'codigoDrenagem': codigoDrenagem,
       'identificacaoDrenagem': identificacaoDrenagem,
+      'rodovia': rodovia,
       'estaca': estaca,
       'lado': lado,
       'latitude': latitude,
@@ -103,6 +104,7 @@ class ConferenciaRegistroModel {
       codigoDrenagem: map['codigoDrenagem']?.toString() ?? '',
       identificacaoDrenagem:
           map['identificacaoDrenagem']?.toString() ?? '',
+      rodovia: map['rodovia']?.toString() ?? '',
       estaca: map['estaca']?.toString(),
       lado: map['lado']?.toString(),
       latitude: _converterDouble(map['latitude']),
@@ -125,6 +127,7 @@ class ConferenciaRegistroModel {
     String? id,
     String? codigoDrenagem,
     String? identificacaoDrenagem,
+    String? rodovia,
     String? estaca,
     String? lado,
     double? latitude,
@@ -145,6 +148,7 @@ class ConferenciaRegistroModel {
       codigoDrenagem: codigoDrenagem ?? this.codigoDrenagem,
       identificacaoDrenagem:
           identificacaoDrenagem ?? this.identificacaoDrenagem,
+      rodovia: rodovia ?? this.rodovia,
       estaca: estaca ?? this.estaca,
       lado: lado ?? this.lado,
       latitude: latitude ?? this.latitude,
