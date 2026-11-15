@@ -7,6 +7,7 @@ import '../models/conferencia_registro_model.dart';
 import '../models/drenagem_model.dart';
 import '../services/conferencia_repository.dart';
 import 'localizacao_automatica_screen.dart';
+import 'relatorio_concreto_screen.dart';
 
 class ConferenciaScreen extends StatefulWidget {
   const ConferenciaScreen({super.key});
@@ -49,6 +50,14 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
 
       _mostrarMensagem('Erro ao carregar histórico.', erro: true);
     }
+  }
+
+  Future<void> _abrirRelatorio() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => const RelatorioConcretoScreen(),
+      ),
+    );
   }
 
   Future<void> _iniciarConferencia() async {
@@ -300,6 +309,8 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
               _cardStatusGps(),
               const SizedBox(height: 16),
               _botaoIniciar(),
+              const SizedBox(height: 12),
+              _botaoRelatorio(),
               const SizedBox(height: 26),
               _tituloHistorico(),
               const SizedBox(height: 10),
@@ -448,6 +459,26 @@ class _ConferenciaScreenState extends State<ConferenciaScreen> {
                 ),
               ],
             ),
+    );
+  }
+
+  Widget _botaoRelatorio() {
+    return OutlinedButton.icon(
+      onPressed: _abrirRelatorio,
+      icon: const Icon(Icons.assessment_outlined),
+      label: const Text(
+        'RELATÓRIO MENSAL DE CONCRETO',
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.2,
+        ),
+      ),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(double.infinity, 56),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+        ),
+      ),
     );
   }
 
