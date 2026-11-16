@@ -20,6 +20,11 @@ class ConferenciaRegistroModel {
   final Map<String, double> tolerancias;
   final double? volumeConcretoM3;
 
+  // Dados detalhados do cálculo de concreto TSS.
+  final String? tipoTss;
+  final bool calculadoPorMedicaoReal;
+  final Map<String, dynamic> resultadoTss;
+
   const ConferenciaRegistroModel({
     required this.id,
     required this.codigoDrenagem,
@@ -39,6 +44,9 @@ class ConferenciaRegistroModel {
     this.medidasExecutadas = const {},
     this.tolerancias = const {},
     this.volumeConcretoM3,
+    this.tipoTss,
+    this.calculadoPorMedicaoReal = false,
+    this.resultadoTss = const {},
   });
 
   int get quantidadeItensConcluidos =>
@@ -95,6 +103,9 @@ class ConferenciaRegistroModel {
       'medidasExecutadas': medidasExecutadas,
       'tolerancias': tolerancias,
       'volumeConcretoM3': volumeConcretoM3,
+      'tipoTss': tipoTss,
+      'calculadoPorMedicaoReal': calculadoPorMedicaoReal,
+      'resultadoTss': resultadoTss,
     };
   }
 
@@ -120,6 +131,10 @@ class ConferenciaRegistroModel {
       medidasExecutadas: _converterMapaDouble(map['medidasExecutadas']),
       tolerancias: _converterMapaDouble(map['tolerancias']),
       volumeConcretoM3: _converterDoubleNulo(map['volumeConcretoM3']),
+      tipoTss: map['tipoTss']?.toString(),
+      calculadoPorMedicaoReal:
+          map['calculadoPorMedicaoReal'] == true,
+      resultadoTss: _converterMapaDinamico(map['resultadoTss']),
     );
   }
 
@@ -142,6 +157,9 @@ class ConferenciaRegistroModel {
     Map<String, double>? medidasExecutadas,
     Map<String, double>? tolerancias,
     double? volumeConcretoM3,
+    String? tipoTss,
+    bool? calculadoPorMedicaoReal,
+    Map<String, dynamic>? resultadoTss,
   }) {
     return ConferenciaRegistroModel(
       id: id ?? this.id,
@@ -164,6 +182,10 @@ class ConferenciaRegistroModel {
       medidasExecutadas: medidasExecutadas ?? this.medidasExecutadas,
       tolerancias: tolerancias ?? this.tolerancias,
       volumeConcretoM3: volumeConcretoM3 ?? this.volumeConcretoM3,
+      tipoTss: tipoTss ?? this.tipoTss,
+      calculadoPorMedicaoReal:
+          calculadoPorMedicaoReal ?? this.calculadoPorMedicaoReal,
+      resultadoTss: resultadoTss ?? this.resultadoTss,
     );
   }
 
@@ -205,6 +227,14 @@ class ConferenciaRegistroModel {
     });
 
     return resultado;
+  }
+
+  static Map<String, dynamic> _converterMapaDinamico(dynamic valor) {
+    if (valor is! Map) return {};
+
+    return valor.map(
+      (chave, dado) => MapEntry(chave.toString(), dado),
+    );
   }
 
   static DateTime _converterData(dynamic valor) {
