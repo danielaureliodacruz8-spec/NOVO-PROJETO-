@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../models/drenagem_model.dart';
 import '../services/identificacao_drenagem_service.dart';
-import '../services/calculo_concreto_service.dart';
+import '../services/calculo_tss_service.dart';
 
 class RoteiroDrenagemScreen extends StatefulWidget {
   final DrenagemModel drenagem;
@@ -31,16 +31,24 @@ class RoteiroDrenagemScreen extends StatefulWidget {
 class _RoteiroDrenagemScreenState extends State<RoteiroDrenagemScreen> {
   late List<bool> _itensConcluidos;
 
+  final CalculoTssService _calculoTssService = CalculoTssService();
+
+  TipoTssProjeto _tipoTss = tiposTssProjeto.first;
+  bool _usarMedicaoReal = false;
+
   final TextEditingController _observacaoController =
       TextEditingController();
 
-  final TextEditingController _larguraController =
+  final TextEditingController _comprimentoTssController =
       TextEditingController();
 
-  final TextEditingController _comprimentoController =
+  final TextEditingController _areaBaseController =
       TextEditingController();
 
-  final TextEditingController _espessuraController =
+  final TextEditingController _larguraLajeController =
+      TextEditingController();
+
+  final TextEditingController _espessuraLajeController =
       TextEditingController();
 
   @override
@@ -56,9 +64,10 @@ class _RoteiroDrenagemScreenState extends State<RoteiroDrenagemScreen> {
   @override
   void dispose() {
     _observacaoController.dispose();
-    _larguraController.dispose();
-    _comprimentoController.dispose();
-    _espessuraController.dispose();
+    _comprimentoTssController.dispose();
+    _areaBaseController.dispose();
+    _larguraLajeController.dispose();
+    _espessuraLajeController.dispose();
     super.dispose();
   }
 
@@ -73,30 +82,82 @@ class _RoteiroDrenagemScreenState extends State<RoteiroDrenagemScreen> {
       widget.drenagem.tipo == TipoDrenagem.transposicaoSarjeta;
 
   double? _converterMedida(String texto) {
-    return double.tryParse(texto.trim().replaceAll(',', '.'));
-  }
+    final valor = double.tryParse(
+      texto.trim().replaceAll(',', '.'),
+    );
 
-  double? get _volumeConcreto {
-    if (!_ehTss) return null;
-
-    final largura = _converterMedida(_larguraController.text);
-    final comprimento = _converterMedida(_comprimentoController.text);
-    final espessura = _converterMedida(_espessuraController.text);
-
-    if (largura == null ||
-        comprimento == null ||
-        espessura == null) {
+    if (valor == null || !valor.isFinite || valor <= 0) {
       return null;
     }
 
-    return CalculoConcretoService.calcularTss(
-      largura: largura,
-      comprimento: comprimento,
-      espessura: espessura,
-    );
+    return valor;
   }
 
+  ResultadoVolumeTss? get _resultadoTss {
+    if (!_ehTss) return null;
+
+    final comprimento = _converterMedida(
+      _comprimentoTssController.text,
+    );
+
+    if (comprimento == null) return null;
+
+    try {
+      if (!_usarMedicaoReal) {
+        return _calculoTssService.calcularPorProjeto(
+          tipo: _tipoTss,
+          comprimentoExecutadoMetros: comprimento,
+        );
+      }
+
+      final areaBase = _converterMedida(
+        _areaBaseController.text,
+      );
+
+      final larguraLaje = _converterMedida(
+        _larguraLajeController.text,
+      );
+
+      final espessuraLaje = _converterMedida(
+        _espessuraLajeController.text,
+      );
+
+      if (areaBase == null ||
+          larguraLaje == null ||
+          espessuraLaje == null) {
+        return null;
+      }
+
+      return _calculoTssService.calcularPorMedicaoReal(
+        tipo: _tipoTss,
+        comprimentoExecutadoMetros: comprimento,
+        areaLiquidaBaseMetrosQuadrados: areaBase,
+        larguraLajeMetros: larguraLaje,
+        espessuraLajeMetros: espessuraLaje,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool get _podeFinalizar =>
+      _roteiroConcluido &&
+      (!_ehTss || _resultadoTss != null);
+
   void _finalizarRoteiro() {
+    final resultadoTss = _ehTss ? _resultadoTss : null;
+
+    if (_ehTss && resultadoTss == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Preencha corretamente as medidas da TSS.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final itensFinalizados = List.generate(
       _itensConcluidos.length,
       (index) => _itensConcluidos[index]
@@ -116,14 +177,28 @@ class _RoteiroDrenagemScreenState extends State<RoteiroDrenagemScreen> {
       'dataHora': DateTime.now(),
     };
 
-    if (_ehTss) {
+    if (resultadoTss != null) {
       resultado['medidasConcreto'] = {
-        'largura': _converterMedida(_larguraController.text),
-        'comprimento': _converterMedida(_comprimentoController.text),
-        'espessura': _converterMedida(_espessuraController.text),
+        'comprimentoExecutado':
+            resultadoTss.comprimentoExecutadoMetros,
+        'areaLiquidaBase':
+            resultadoTss.areaLiquidaBaseMedida,
+        'areaLiquidaBaseProjeto':
+            resultadoTss.areaLiquidaBaseProjeto,
+        'larguraLaje':
+            resultadoTss.larguraLajeMedida,
+        'espessuraLaje':
+            resultadoTss.espessuraLajeMedida,
       };
 
-      resultado['volumeConcretoM3'] = _volumeConcreto;
+      resultado['tipoTss'] = resultadoTss.tipo.codigo;
+      resultado['calculadoPorMedicaoReal'] =
+          resultadoTss.calculadoPorMedicaoReal;
+
+      resultado['resultadoTss'] = resultadoTss.toMap();
+
+      resultado['volumeConcretoM3'] =
+          resultadoTss.volumeTotalConcreto;
     }
 
     Navigator.of(context).pop(resultado);
@@ -165,7 +240,7 @@ class _RoteiroDrenagemScreenState extends State<RoteiroDrenagemScreen> {
                   ),
                   if (_ehTss) ...[
                     const SizedBox(height: 18),
-                    _cardMedidasConcreto(),
+                    _cardMedidasTss(),
                   ],
                   const SizedBox(height: 12),
                   _campoObservacao(),
@@ -174,14 +249,15 @@ class _RoteiroDrenagemScreenState extends State<RoteiroDrenagemScreen> {
                     height: 52,
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: _roteiroConcluido
-                          ? _finalizarRoteiro
-                          : null,
+                      onPressed:
+                          _podeFinalizar ? _finalizarRoteiro : null,
                       icon: const Icon(Icons.check_circle_rounded),
                       label: Text(
-                        _roteiroConcluido
-                            ? 'FINALIZAR CONFERÊNCIA'
-                            : 'CONCLUA TODOS OS ITENS',
+                        !_roteiroConcluido
+                            ? 'CONCLUA TODOS OS ITENS'
+                            : (_ehTss && _resultadoTss == null)
+                                ? 'PREENCHA AS MEDIDAS DA TSS'
+                                : 'FINALIZAR CONFERÊNCIA',
                       ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF16803C),
@@ -381,7 +457,9 @@ class _RoteiroDrenagemScreenState extends State<RoteiroDrenagemScreen> {
     );
   }
 
-  Widget _cardMedidasConcreto() {
+  Widget _cardMedidasTss() {
+    final resultado = _resultadoTss;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -401,70 +479,250 @@ class _RoteiroDrenagemScreenState extends State<RoteiroDrenagemScreen> {
               SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'MEDIDAS E VOLUME DE CONCRETO - TSS',
+                  'CÁLCULO DE CONCRETO - TSS',
                   style: TextStyle(
                     color: Color(0xFF0B5CAD),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w900,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
           const Text(
-            'Informe as dimensões executadas em metros.',
+            'TIPO DE TSS',
             style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF475569),
+            ),
+          ),
+          const SizedBox(height: 7),
+          DropdownButtonFormField<TipoTssProjeto>(
+            value: _tipoTss,
+            isExpanded: true,
+            decoration: _decoracaoCampo('Selecione o tipo'),
+            items: tiposTssProjeto.map((tipo) {
+              return DropdownMenuItem<TipoTssProjeto>(
+                value: tipo,
+                child: Text(tipo.codigo),
+              );
+            }).toList(),
+            onChanged: (tipo) {
+              if (tipo == null) return;
+              setState(() {
+                _tipoTss = tipo;
+              });
+            },
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _tipoTss.descricao,
+            style: const TextStyle(
               color: Color(0xFF475569),
               fontSize: 12,
             ),
           ),
-          const SizedBox(height: 14),
-          _campoMedida(
-            controller: _larguraController,
-            label: 'Largura (m)',
+          const SizedBox(height: 16),
+          const Text(
+            'MÉTODO DE CÁLCULO',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: Color(0xFF475569),
+            ),
           ),
-          const SizedBox(height: 10),
-          _campoMedida(
-            controller: _comprimentoController,
-            label: 'Comprimento (m)',
-          ),
-          const SizedBox(height: 10),
-          _campoMedida(
-            controller: _espessuraController,
-            label: 'Espessura (m)',
+          const SizedBox(height: 7),
+          DropdownButtonFormField<bool>(
+            value: _usarMedicaoReal,
+            decoration: _decoracaoCampo('Método'),
+            items: const [
+              DropdownMenuItem(
+                value: false,
+                child: Text('Consumo de projeto'),
+              ),
+              DropdownMenuItem(
+                value: true,
+                child: Text('Medidas reais executadas'),
+              ),
+            ],
+            onChanged: (valor) {
+              if (valor == null) return;
+              setState(() {
+                _usarMedicaoReal = valor;
+              });
+            },
           ),
           const SizedBox(height: 16),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+          _campoMedida(
+            controller: _comprimentoTssController,
+            label: 'Comprimento executado',
+            unidade: 'm',
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Limite cadastrado: 3,00 m por segmento.',
+            style: TextStyle(
+              color: Color(0xFF64748B),
+              fontSize: 11,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'VOLUME CALCULADO',
-                  style: TextStyle(
-                    color: Color(0xFF64748B),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  CalculoConcretoService.formatarVolume(
-                    _volumeConcreto,
-                  ),
-                  style: const TextStyle(
-                    color: Color(0xFF166534),
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
+          ),
+          if (_usarMedicaoReal) ...[
+            const SizedBox(height: 16),
+            const Text(
+              'MEDIDAS REAIS DA BASE E DA LAJE',
+              style: TextStyle(
+                color: Color(0xFF0B5CAD),
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _campoMedida(
+              controller: _areaBaseController,
+              label: 'Área líquida da seção da base',
+              unidade: 'm²',
+            ),
+            const SizedBox(height: 8),
+            _campoMedida(
+              controller: _larguraLajeController,
+              label: 'Largura real da laje',
+              unidade: 'm',
+            ),
+            const SizedBox(height: 8),
+            _campoMedida(
+              controller: _espessuraLajeController,
+              label: 'Espessura real da laje',
+              unidade: 'm',
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'A área da base deve representar somente o concreto '
+              'da base, sem incluir a laje nem o vazio da sarjeta.',
+              style: TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 11,
+              ),
+            ),
+          ],
+          const SizedBox(height: 18),
+          if (resultado == null)
+            _cardResultadoVazio()
+          else
+            _cardResultadoTss(resultado),
+        ],
+      ),
+    );
+  }
+
+  Widget _cardResultadoVazio() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Text(
+        'Preencha as medidas para visualizar o cálculo.',
+        style: TextStyle(
+          color: Color(0xFF64748B),
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  Widget _cardResultadoTss(ResultadoVolumeTss resultado) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            resultado.calculadoPorMedicaoReal
+                ? 'RESULTADO PELAS MEDIDAS REAIS'
+                : 'RESULTADO PELO CONSUMO DE PROJETO',
+            style: const TextStyle(
+              color: Color(0xFF0B5CAD),
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          _linhaResultado(
+            'Base - fck ≥ 20 MPa',
+            resultado.volumeBaseFck20,
+          ),
+          const SizedBox(height: 7),
+          _linhaResultado(
+            'Laje - fck ≥ 25 MPa',
+            resultado.volumeLajeFck25,
+          ),
+          const Divider(height: 22),
+          const Text(
+            'TOTAL DE CONCRETO',
+            style: TextStyle(
+              color: Color(0xFF64748B),
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${resultado.volumeTotalConcreto.toStringAsFixed(3)} m³',
+            style: const TextStyle(
+              color: Color(0xFF166534),
+              fontSize: 25,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'COMPARAÇÃO COM O PROJETO',
+            style: TextStyle(
+              color: Color(0xFF475569),
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _linhaComparacao(
+            'Base',
+            resultado.volumeBaseFck20Projeto,
+            resultado.volumeBaseFck20Diferenca,
+          ),
+          const SizedBox(height: 6),
+          _linhaComparacao(
+            'Laje',
+            resultado.volumeLajeFck25Projeto,
+            resultado.volumeLajeFck25Diferenca,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Diferença total: '
+            '${resultado.diferencaTotalConcreto >= 0 ? '+' : ''}'
+            '${resultado.diferencaTotalConcreto.toStringAsFixed(3)} m³ '
+            '(${resultado.percentualDiferencaTotal.toStringAsFixed(1)}%)',
+            style: const TextStyle(
+              color: Color(0xFF334155),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Escavação, formas e aço são estimativas calculadas '
+            'pelos consumos de projeto, não medições reais.',
+            style: TextStyle(
+              color: Color(0xFF64748B),
+              fontSize: 10,
             ),
           ),
         ],
@@ -472,9 +730,75 @@ class _RoteiroDrenagemScreenState extends State<RoteiroDrenagemScreen> {
     );
   }
 
+  Widget _linhaResultado(String titulo, double volume) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Text(
+            titulo,
+            style: const TextStyle(
+              color: Color(0xFF334155),
+              fontSize: 12,
+            ),
+          ),
+        ),
+        Text(
+          '${volume.toStringAsFixed(3)} m³',
+          style: const TextStyle(
+            color: Color(0xFF1E293B),
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _linhaComparacao(
+    String titulo,
+    double projeto,
+    double diferenca,
+  ) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            '$titulo: projeto ${projeto.toStringAsFixed(3)} m³',
+            style: const TextStyle(
+              color: Color(0xFF475569),
+              fontSize: 11,
+            ),
+          ),
+        ),
+        Text(
+          '${diferenca >= 0 ? '+' : ''}'
+          '${diferenca.toStringAsFixed(3)} m³',
+          style: const TextStyle(
+            color: Color(0xFF334155),
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+
+  InputDecoration _decoracaoCampo(String label) {
+    return InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+    );
+  }
+
   Widget _campoMedida({
     required TextEditingController controller,
     required String label,
+    required String unidade,
   }) {
     return TextField(
       controller: controller,
@@ -483,7 +807,7 @@ class _RoteiroDrenagemScreenState extends State<RoteiroDrenagemScreen> {
       onChanged: (_) => setState(() {}),
       decoration: InputDecoration(
         labelText: label,
-        suffixText: 'm',
+        suffixText: unidade,
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(
