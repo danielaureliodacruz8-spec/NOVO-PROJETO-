@@ -22,6 +22,21 @@ class _RelatorioConcretoScreenState
   bool _carregando = true;
   late DateTime _mesSelecionado;
 
+  static const List<String> _meses = [
+    'Janeiro',
+    'Fevereiro',
+    'Março',
+    'Abril',
+    'Maio',
+    'Junho',
+    'Julho',
+    'Agosto',
+    'Setembro',
+    'Outubro',
+    'Novembro',
+    'Dezembro',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -33,7 +48,9 @@ class _RelatorioConcretoScreenState
   }
 
   Future<void> _carregarDados() async {
-    setState(() => _carregando = true);
+    if (mounted) {
+      setState(() => _carregando = true);
+    }
 
     try {
       final dados = await _repository.carregar();
@@ -57,13 +74,25 @@ class _RelatorioConcretoScreenState
     }
   }
 
+  String _normalizarRodovia(String rodovia) {
+    return rodovia.trim().toUpperCase();
+  }
+
   List<ConferenciaRegistroModel> get _registrosDoMes {
     return _conferencias.where((registro) {
+      final rodovia = _normalizarRodovia(registro.rodovia);
+
+      final rodoviaValida =
+          rodovia == 'GO-110' || rodovia == 'GO-236';
+
+      final volume = registro.volumeConcretoM3;
+
       return registro.dataHora.year == _mesSelecionado.year &&
           registro.dataHora.month == _mesSelecionado.month &&
-          registro.volumeConcretoM3 != null &&
-          registro.volumeConcretoM3!.isFinite &&
-          registro.volumeConcretoM3! > 0;
+          rodoviaValida &&
+          volume != null &&
+          volume.isFinite &&
+          volume > 0;
     }).toList();
   }
 
@@ -71,8 +100,8 @@ class _RelatorioConcretoScreenState
     return _registrosDoMes
         .where(
           (registro) =>
-              registro.rodovia.trim().toUpperCase() ==
-              rodovia.toUpperCase(),
+              _normalizarRodovia(registro.rodovia) ==
+              _normalizarRodovia(rodovia),
         )
         .fold<double>(
           0,
@@ -82,18 +111,15 @@ class _RelatorioConcretoScreenState
   }
 
   double get _totalGeral {
-    return _registrosDoMes.fold<double>(
-      0,
-      (total, registro) => total + registro.volumeConcretoM3!,
-    );
+    return _somarVolume('GO-110') + _somarVolume('GO-236');
   }
 
   int _quantidadePorRodovia(String rodovia) {
     return _registrosDoMes
         .where(
           (registro) =>
-              registro.rodovia.trim().toUpperCase() ==
-              rodovia.toUpperCase(),
+              _normalizarRodovia(registro.rodovia) ==
+              _normalizarRodovia(rodovia),
         )
         .length;
   }
@@ -113,7 +139,6 @@ class _RelatorioConcretoScreenState
 
   Widget _cardResumo({
     required String titulo,
-    required String rodovia,
     required double volume,
     required int quantidade,
     required IconData icone,
@@ -169,8 +194,8 @@ class _RelatorioConcretoScreenState
   }
 
   Widget _seletorMes() {
-    final formato = DateFormat('MMMM yyyy', 'pt_BR');
-    final mes = formato.format(_mesSelecionado);
+    final mes =
+        '${_meses[_mesSelecionado.month - 1]} ${_mesSelecionado.year}';
 
     return Card(
       child: Padding(
@@ -187,7 +212,7 @@ class _RelatorioConcretoScreenState
             ),
             Expanded(
               child: Text(
-                toBeginningOfSentenceCase(mes) ?? mes,
+                mes,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
@@ -240,10 +265,7 @@ class _RelatorioConcretoScreenState
 
     return Column(
       children: registros.map((registro) {
-        final data = DateFormat(
-          'dd/MM/yyyy',
-          'pt_BR',
-        ).format(registro.dataHora);
+        final data = DateFormat('dd/MM/yyyy').format(registro.dataHora);
 
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
@@ -256,7 +278,7 @@ class _RelatorioConcretoScreenState
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
-              '${registro.rodovia.isNotEmpty ? registro.rodovia : 'Rodovia não informada'} • '
+              '${registro.rodovia} • '
               '${registro.estaca ?? 'Estaca não informada'} • $data',
             ),
             trailing: Text(
@@ -327,7 +349,6 @@ class _RelatorioConcretoScreenState
                   const SizedBox(height: 12),
                   _cardResumo(
                     titulo: 'GO-110',
-                    rodovia: 'GO-110',
                     volume: _somarVolume('GO-110'),
                     quantidade: _quantidadePorRodovia('GO-110'),
                     icone: Icons.construction,
@@ -335,7 +356,6 @@ class _RelatorioConcretoScreenState
                   ),
                   _cardResumo(
                     titulo: 'GO-236',
-                    rodovia: 'GO-236',
                     volume: _somarVolume('GO-236'),
                     quantidade: _quantidadePorRodovia('GO-236'),
                     icone: Icons.engineering,
